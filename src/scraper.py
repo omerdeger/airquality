@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from sqlalchemy import create_engine, inspect
 
-engine = create_engine('sqlite:///airquality/src/airquality3day.db')
+engine = create_engine('sqlite:///src/airquality3day.db')
 url_base = "https://www.havaizleme.gov.tr/"
 now = datetime.now()
 

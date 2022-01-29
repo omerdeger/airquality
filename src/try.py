@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 import json
 
 Base = declarative_base()
-data = json.load(open('airquality/src/data.json'))
+data = json.load(open('src/data.json'))
 engine = create_engine('sqlite:///airql.db')
 
 
