@@ -1,14 +1,11 @@
 from datetime import datetime, timedelta
 import requests
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import and_, create_engine, inspect, select
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.declarative import declarative_base
-import pandas as pd
-import time
 
-
-engine = create_engine("sqlite:///src/data.sqlite3")
+engine = create_engine('sqlite:///src/db.sqlite3')
 Base = declarative_base()
 url_base = "https://www.havaizleme.gov.tr/"
 now = datetime.now()
@@ -16,7 +13,7 @@ session = Session(bind=engine)
 
 
 class Station(Base):
-    __tablename__ = "station"
+    __tablename__ = 'station'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     station_id = Column(String)
@@ -28,7 +25,7 @@ class Station(Base):
 
 
 class StationData(Base):
-    __tablename__ = "station_data"
+    __tablename__ = 'station_data'
 
     id = Column(Integer, primary_key=True)
     station_id = Column(String)
@@ -42,7 +39,7 @@ class StationData(Base):
 
 
 def station_list():
-    if table_exists(engine, "station"):
+    if table_exists(engine, 'station'):
         station_list = engine.execute(select(Station.station_id)).fetchall()
     else:
         get_station_list()
@@ -53,32 +50,34 @@ def station_list():
 def get_station_list():
     Base.metadata.create_all(engine)  # create table
     url = url_base + "Services/GetAirQualityStations?type=0"
-    form_data = {"Year": now.year, "Month": now.month, "Day": now.day, "Hour": now.hour}
+    form_data = {
+        'Year': now.year,
+        'Month': now.month,
+        'Day': now.day,
+        'Hour': now.hour
+    }
     # Gettin data in the url and listing json format.
     station_list = requests.get(url, data=form_data)
-    station_list = station_list.json()["objects"]
+    station_list = station_list.json()['objects']
     # Creating a list of station objects.
 
     def lat_long_from_location(station_id):
-        stripped_loc = station_id["Location"].strip("POINT ()")
+        stripped_loc = station_id['Location'].strip("POINT ()")
         lat, long = stripped_loc.split(" ")
         return lat, long
 
     for station in station_list:
         new_station = Station(
-            station_id=station["id"],
-            name=station["Name"],
-            city=station["City_Title"],
-            town=station["Town_Title"],
+            station_id=station['id'],
+            name=station['Name'],
+            city=station['City_Title'],
+            town=station['Town_Title'],
             lat=lat_long_from_location(station)[0],
-            long=lat_long_from_location(station)[1],
+            long=lat_long_from_location(station)[1]
         )
         with Session(bind=engine) as session:
-            exists_query = session.query(
-                session.query(Station)
-                .filter(Station.station_id == station["id"])
-                .exists()
-            ).scalar()
+            exists_query = session.query(session.query(Station).filter(
+                Station.station_id == station['id']).exists()).scalar()
 
             if not exists_query:
                 new_station_data = new_station
@@ -89,7 +88,7 @@ def get_station_list():
 
 def x_year_ago(x):
     days_per_year = 365.25
-    start_time = now - timedelta(days_per_year * x)
+    start_time = now - timedelta(days_per_year*x)
     return start_time
 
 
@@ -108,9 +107,8 @@ def get_last_date_hour(station_id):
                 SELECT Date
                 FROM station_data
                 WHERE station_id = ?
-                ORDER BY Date DESC""",
-            (station_id[0],),
-        ).fetchone()
+                ORDER BY Date DESC""", (station_id[0],)).fetchone()
+        print("get_last_date_hour(1)", station_id[0], result)
         if result:
             last_table_time = datetime.fromisoformat(result[0])
             print("get_last_date_hour(2)", last_table_time)
@@ -124,68 +122,45 @@ def get_last_date_hour(station_id):
     return start_time
 
 
-def get_station_detail_to_sql(station_id_list):
+def get_station_detail(station_id_list):
     url = url_base + "Services/GetAirQualityStationDetail?type=0"
-    start_time = time.time()
-    for k, station_id in enumerate(station_id_list):
-        last_time = get_last_date_hour(station_id)
-        start_time_st = time.time()
-        while last_time <= now:
-            start_time_ex = time.time()
+    for k, station_id in (enumerate(station_id_list)):
+        time = get_last_date_hour(station_id)
+        while time <= now:
             form_data = {
-                "stationId": station_id[0],
-                "Year": last_time.year,
-                "Month": last_time.month,
-                "Day": last_time.day,
-                "Hour": last_time.hour,
+                'stationId': station_id[0],
+                'Year': time.year,
+                'Month': time.month,
+                'Day': time.day,
+                'Hour': time.hour
             }
+            print("get_station_detail()", k+1, "/", len(station_id_list),
+                  time.year, time.month, time.day, time.hour)
             station_data = requests.get(url, data=form_data)
-            station_data = station_data.json()["objects"]["AQIValues"]
-            station_data = sorted(station_data, key=lambda k: k["Date"])
-            get_last_date_from_db = engine.execute(
-                """
-                SELECT Date
-                FROM station_data
-                WHERE station_id = ?
-                ORDER BY Date DESC""",
-                (station_id[0],),
-            ).fetchone()
-            if get_last_date_from_db:
-                station_data = [
-                    x for x in station_data if x["Date"] > get_last_date_from_db[0]
-                ]
-            dataf = pd.DataFrame(
-                station_data,
-                columns=["StationId", "Date", "PM10", "SO2", "NO2", "O3", "CO", "PM25"],
-            )
-            dataf.rename(
-                columns={
-                    "StationId": "station_id",
-                    "Date": "date",
-                    "PM10": "pm10",
-                    "SO2": "so2",
-                    "NO2": "no2",
-                    "O3": "o3",
-                    "CO": "co",
-                    "PM25": "pm25",
-                },
-                inplace=True,
-            )
-            dataf.to_sql("station_data", engine, if_exists="append", index=False)
-            print(
-                k + 1,
-                "/",
-                len(station_id_list),
-                last_time.year,
-                last_time.month,
-                last_time.day,
-                last_time.hour,
-                time.time() - start_time,
-                time.time() - start_time_st,
-                time.time() - start_time_ex,
-            )
-            last_time += timedelta(hours=73)
+            station_data = station_data.json()['objects']['AQIValues']
+            with Session(bind=engine) as session:
+                for data in station_data:
+                    exists_query = session.query(session.query(StationData).filter(and_(
+                        StationData.station_id == data['StationId'],
+                        StationData.date == data['Date'])).exists()).scalar()
+                    if not exists_query:
+                        new_station_data = StationData(
+                            station_id=data['StationId'],
+                            date=data['Date'],
+                            pm10=data['PM10'],
+                            so2=data['SO2'],
+                            no2=data['NO2'],
+                            o3=data['O3'],
+                            co=data['CO'],
+                            pm25=data['PM25']
+                        )
+                        session.add(new_station_data)
+                    else:
+                        print(
+                            f"{data['StationId']} {data['Date']} already exists")
+                    session.commit()
+            time += timedelta(hours=73)
 
 
 if __name__ == "__main__":
-    get_station_detail_to_sql(station_list())
+    get_station_detail(station_list())
