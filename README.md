@@ -3,6 +3,13 @@
 
 AirQuality is crawl some air data for türkiye on web, especially [havaizleme](https://www.havaizleme.gov.tr/). Purpose of the tool (for now), get last one year data and store on SQLite db.
 
+## To-do
+
+- Exporting and saving meaningful data
+- cli integration
+- AI based
+- Splitting file and method, Make Class method for scrapper
+
 ## Tech
 
 Airquality uses a number of open source projects to work properly:

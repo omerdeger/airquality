@@ -1,44 +1,15 @@
-from datetime import datetime, timedelta
-import requests
-from sqlalchemy import create_engine, inspect, select
-from sqlalchemy import Column, Integer, String
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.declarative import declarative_base
 import pandas as pd
-import time
+import requests
+from datetime import datetime, timedelta
+from sqlalchemy import inspect, select
+from sqlalchemy.orm import Session
+from time import time
+
+from database import engine, Station
 
 
-engine = create_engine("sqlite:///src/data.sqlite3")
-Base = declarative_base()
 url_base = "https://www.havaizleme.gov.tr/"
 now = datetime.now()
-session = Session(bind=engine)
-
-
-class Station(Base):
-    __tablename__ = "station"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(String)
-    name = Column(String)
-    city = Column(String)
-    town = Column(String)
-    lat = Column(String)
-    long = Column(String)
-
-
-class StationData(Base):
-    __tablename__ = "station_data"
-
-    id = Column(Integer, primary_key=True)
-    station_id = Column(String)
-    date = Column(String)
-    co = Column(String)
-    no2 = Column(String)
-    o3 = Column(String)
-    pm25 = Column(String)
-    pm10 = Column(Integer)
-    so2 = Column(Integer)
 
 
 def station_list():
@@ -51,7 +22,6 @@ def station_list():
 
 
 def get_station_list():
-    Base.metadata.create_all(engine)  # create table
     url = url_base + "Services/GetAirQualityStations?type=0"
     form_data = {"Year": now.year, "Month": now.month, "Day": now.day, "Hour": now.hour}
     # Gettin data in the url and listing json format.
@@ -126,12 +96,12 @@ def get_last_date_hour(station_id):
 
 def get_station_detail_to_sql(station_id_list):
     url = url_base + "Services/GetAirQualityStationDetail?type=0"
-    start_time = time.time()
+    start_time = time()
     for k, station_id in enumerate(station_id_list):
         last_time = get_last_date_hour(station_id)
-        start_time_st = time.time()
+        start_time_st = time()
         while last_time <= now:
-            start_time_ex = time.time()
+            start_time_ex = time()
             form_data = {
                 "stationId": station_id[0],
                 "Year": last_time.year,
@@ -180,10 +150,11 @@ def get_station_detail_to_sql(station_id_list):
                 last_time.month,
                 last_time.day,
                 last_time.hour,
-                time.time() - start_time,
-                time.time() - start_time_st,
-                time.time() - start_time_ex,
+                round(time() - start_time, 2),
+                round(time() - start_time_st, 2),
+                round(time() - start_time_ex, 2),
             )
+            last_time += timedelta(hours=1)
             last_time += timedelta(hours=73)
 
 
